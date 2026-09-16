@@ -30,7 +30,7 @@
   </div>
 
   <script>
-    // 📌 [จุดตั้งค่า] นำ LIFF ID มาวางแทนที่ตรงนี้
+    // 📌 LIFF ID
     const MY_LIFF_ID = "2011623730-VtDUPgUI";
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -180,7 +180,7 @@
         if (name) {
           options.push({
             name: name,
-            max: hasLimit ? (isNaN(maxVal) ? 1 : maxVal) : null, // null คือไม่อั้น
+            max: hasLimit ? (isNaN(maxVal) ? 1 : maxVal) : null,
             voters: []
           });
         }
@@ -208,21 +208,18 @@
       const userName = profile.displayName;
       const opt = pollState.options[optionIdx];
 
-      // เช็ก Quota ถ้ามีการกำหนดจำกัดจำนวนไว้
       if (opt.max !== null && opt.voters.length >= opt.max) {
         alert('ขออภัย! ตัวเลือกนี้เพิ่งเต็มไปเมื่อสักครู่นี้');
         location.reload();
         return;
       }
 
-      // เช็กการเลือกซ้ำ
       const hasVotedThisOpt = opt.voters.includes(userName);
       if (hasVotedThisOpt) {
         alert('คุณได้ลงชื่อในตัวเลือกนี้ไปแล้ว');
         return;
       }
 
-      // กรณีไม่อนุญาตให้เลือกหลายข้อ แต่เคยตอบตัวเลือกอื่นไปแล้ว
       if (!pollState.allowMultiple) {
         const hasVotedAny = pollState.options.some(o => o.voters.includes(userName));
         if (hasVotedAny) {
@@ -237,11 +234,18 @@
 
     // ------------------ ส่ง Flex Message ลงแชตกลุ่ม ------------------
     async function shareToGroup(state) {
+      // 1. ตรวจสอบการ Login ก่อนเสมอ
+      if (!liff.isLoggedIn()) {
+        liff.login();
+        return;
+      }
+
       const jsonString = JSON.stringify(state);
       const base64Data = btoa(encodeURIComponent(jsonString));
       const shareURL = `https://liff.line.me/${MY_LIFF_ID}?data=${base64Data}`;
 
-      if (liff.isApiAvailable('shareTargetPicker')) {
+      // 2. เรียก Share Target Picker พร้อมจับ Error
+      try {
         const res = await liff.shareTargetPicker([
           {
             type: "flex",
@@ -272,9 +276,12 @@
             }
           }
         ]);
-        if (res) liff.closeWindow();
-      } else {
-        alert("อุปกรณ์นี้ไม่รองรับการส่งแชร์ตรง กรุณาเปิดในแอป LINE");
+
+        if (res) {
+          liff.closeWindow();
+        }
+      } catch (err) {
+        alert(" Share Target Picker Error: " + (err.message || JSON.stringify(err)));
       }
     }
 
