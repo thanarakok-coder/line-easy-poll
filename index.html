@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LINE Easy Poll</title>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, sans-serif; }
+    body { padding: 16px; background: #f4f5f7; margin: 0; }
+    .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .btn { width: 100%; padding: 12px; background: #06C755; color: white; border: none; border-radius: 8px; font-weight: bold; margin-top: 12px; cursor: pointer; font-size: 16px; }
+    .btn:disabled { background: #ccc; cursor: not-allowed; }
+    .option { border: 1px solid #eee; padding: 12px; margin: 8px 0; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; background: #fafafa; }
+    input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card" id="app">
+    <p>กำลังโหลด...</p>
+  </div>
+
+  <script>
+    // 📌 [จุดตั้งค่าที่ 1] นำ LIFF ID มาวางแทนที่ตรงนี้
+    const MY_LIFF_ID = "YOUR_LIFF_ID_HERE";
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const encodedData = urlParams.get('data');
+    let pollState = null;
+
+    if (encodedData) {
+      try {
+        pollState = JSON.parse(decodeURIComponent(atob(encodedData)));
+      } catch(e) { console.error("Data error", e); }
+    }
+
+    async function initLIFF() {
+      try {
+        await liff.init({ liffId: MY_LIFF_ID });
+        renderUI();
+      } catch (err) {
+        document.getElementById('app').innerHTML = `<p style="color:red">LIFF Init Error: ${err.message}</p>`;
+      }
+    }
+
+    function renderUI() {
+      const app = document.getElementById('app');
+      
+      // หน้าที่ 1: หน้าสร้าง Poll ใหม่
+      if (!pollState) {
+        app.innerHTML = `
+          <h2>สร้าง Poll / จองรอบ</h2>
+          <label>หัวข้อโจทย์:</label>
+          <input type="text" id="title" placeholder="เช่น เลือกวันเวรดูแลคลินิก">
+          <label>ตัวเลือกที่ 1 (จำกัด 2 คน):</label>
+          <input type="text" id="opt1" value="เวรเช้า">
+          <label>ตัวเลือกที่ 2 (จำกัด 2 คน):</label>
+          <input type="text" id="opt2" value="เวรบ่าย">
+          <button class="btn" onclick="createNewPoll()">สร้างและแชร์ลงกลุ่ม LINE</button>
+        `;
+        return;
+      }
+
+      // หน้าที่ 2: หน้าลงชื่อตอบคำถาม
+      let optionsHTML = pollState.options.map((opt, idx) => {
+        const isFull = opt.voters.length >= opt.max;
+        const votersList = opt.voters.length > 0 ? `<br><small style="color:#666">คนลงชื่อ: ${opt.voters.join(', ')}</small>` : '';
+        return `
+          <div class="option">
+            <div>
+              <strong>${opt.name}</strong> (${opt.voters.length}/${opt.max})${votersList}
+            </div>
+            <button class="btn" style="width:auto; margin:0;" onclick="vote(${idx})" ${isFull ? 'disabled' : ''}>
+              ${isFull ? 'เต็ม' : 'เลือก'}
+            </button>
+          </div>
+        `;
+      }).join('');
+
+      app.innerHTML = `
+        <h2>${pollState.title}</h2>
+        ${optionsHTML}
+      `;
+    }
+
+    function createNewPoll() {
+      const title = document.getElementById('title').value;
+      const opt1 = document.getElementById('opt1').value;
+      const opt2 = document.getElementById('opt2').value;
+
+      if (!title || !opt1 || !opt2) return alert('กรุณากรอกข้อมูลให้ครบ');
+
+      const newState = {
+        title: title,
+        options: [
+          { name: opt1, max: 2, voters: [] },
+          { name: opt2, max: 2, voters: [] }
+        ]
+      };
+
+      shareToGroup(newState);
+    }
+
+    async function vote(optionIdx) {
+      if (!liff.isLoggedIn()) {
+        liff.login();
+        return;
+      }
+
+      const profile = await liff.getProfile();
+      const userName = profile.displayName;
+      const opt = pollState.options[optionIdx];
+
+      // เช็ก Quota
+      if (opt.voters.length >= opt.max) {
+        alert('ขออภัย! ตัวเลือกนี้เพิ่งเต็มไปเมื่อสักครู่นี้');
+        location.reload();
+        return;
+      }
+
+      // ป้องกันลงชื่อซ้ำ
+      const hasVoted = pollState.options.some(o => o.voters.includes(userName));
+      if (hasVoted) {
+        alert('คุณได้ลงชื่อในโจทย์นี้ไปแล้ว');
+        return;
+      }
+
+      opt.voters.push(userName);
+      shareToGroup(pollState);
+    }
+
+    async function shareToGroup(state) {
+      const jsonString = JSON.stringify(state);
+      const base64Data = btoa(encodeURIComponent(jsonString));
+      const shareURL = `https://liff.line.me/${MY_LIFF_ID}?data=${base64Data}`;
+
+      if (liff.isApiAvailable('shareTargetPicker')) {
+        const res = await liff.shareTargetPicker([
+          {
+            type: "flex",
+            altText: `Poll: ${state.title}`,
+            contents: {
+              type: "bubble",
+              body: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                  { type: "text", text: "📊 " + state.title, weight: "bold", size: "lg" },
+                  { type: "text", text: "กดปุ่มด้านล่างเพื่อลงชื่อ หรือดูสถานะล่าสุด", margin: "md", color: "#666666", size: "sm", wrap: true }
+                ]
+              },
+              footer: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                  {
+                    type: "button",
+                    action: { type: "uri", label: "เปิดลงชื่อ / ดูผลลัพธ์", uri: shareURL },
+                    style: "primary",
+                    color: "#06C755"
+                  }
+                ]
+              }
+            }
+          }
+        ]);
+        if (res) liff.closeWindow();
+      } else {
+        alert("อุปกรณ์นี้ไม่รองรับการส่งแชร์ตรง กรุณาเปิดในแอป LINE");
+      }
+    }
+
+    initLIFF();
+  </script>
+</body>
+</html>
