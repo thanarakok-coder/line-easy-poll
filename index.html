@@ -3,16 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LINE Easy Poll</title>
+  <title>Easy Poll</title>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
-    * { box-sizing: border-box; font-family: -apple-system, sans-serif; }
-    body { padding: 16px; background: #f4f5f7; margin: 0; }
-    .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-    .btn { width: 100%; padding: 12px; background: #06C755; color: white; border: none; border-radius: 8px; font-weight: bold; margin-top: 12px; cursor: pointer; font-size: 16px; }
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { padding: 16px; background: #f4f5f7; margin: 0; display: flex; justify-content: center; }
+    .card { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); width: 100%; max-width: 500px; }
+    h2 { margin-top: 0; color: #111; font-size: 22px; }
+    label { font-weight: 600; font-size: 14px; color: #333; display: block; margin-top: 12px; margin-bottom: 4px; }
+    input[type="text"], input[type="number"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 15px; }
+    .option-row { border: 1px solid #e2e8f0; padding: 12px; margin: 10px 0; border-radius: 8px; background: #fafafa; }
+    .option-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .quota-box { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; color: #555; }
+    .quota-box input[type="number"] { width: 80px; padding: 4px 8px; margin: 0; }
+    .checkbox-group { display: flex; align-items: center; gap: 8px; margin: 16px 0; font-size: 14px; color: #333; cursor: pointer; }
+    .btn { width: 100%; padding: 12px; background: #06C755; color: white; border: none; border-radius: 8px; font-weight: bold; margin-top: 12px; cursor: pointer; font-size: 16px; text-align: center; }
     .btn:disabled { background: #ccc; cursor: not-allowed; }
-    .option { border: 1px solid #eee; padding: 12px; margin: 8px 0; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; background: #fafafa; }
-    input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 12px; }
+    .btn-secondary { background: #f0f0f0; color: #333; border: 1px solid #ddd; margin-top: 8px; }
+    .btn-danger { background: #ff4d4f; color: white; padding: 6px 12px; font-size: 12px; border: none; border-radius: 4px; cursor: pointer; }
+    .voted-badge { background: #e6f4ea; color: #137333; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-left: 6px; }
   </style>
 </head>
 <body>
@@ -21,8 +30,8 @@
   </div>
 
   <script>
-    // 📌 [จุดตั้งค่าที่ 1] นำ LIFF ID มาวางแทนที่ตรงนี้
-    const MY_LIFF_ID = "2011623730-VtDUPgUI";
+    // 📌 [จุดตั้งค่า] นำ LIFF ID มาวางแทนที่ตรงนี้
+    const MY_LIFF_ID = "YOUR_LIFF_ID_HERE";
 
     const urlParams = new URLSearchParams(window.location.search);
     const encodedData = urlParams.get('data');
@@ -46,61 +55,149 @@
     function renderUI() {
       const app = document.getElementById('app');
       
-      // หน้าที่ 1: หน้าสร้าง Poll ใหม่
+      // ------------------ 1. หน้าสร้าง Poll / สำรวจข้อมูล ------------------
       if (!pollState) {
         app.innerHTML = `
-          <h2>สร้าง Poll / จองรอบ</h2>
-          <label>หัวข้อโจทย์:</label>
-          <input type="text" id="title" placeholder="เช่น เลือกวันเวรดูแลคลินิก">
-          <label>ตัวเลือกที่ 1 (จำกัด 2 คน):</label>
-          <input type="text" id="opt1" value="เวรเช้า">
-          <label>ตัวเลือกที่ 2 (จำกัด 2 คน):</label>
-          <input type="text" id="opt2" value="เวรบ่าย">
+          <h2>สร้าง Poll / สำรวจข้อมูล</h2>
+          
+          <label>คำถาม:</label>
+          <input type="text" id="title" placeholder="พิมพ์หัวข้อที่ต้องการสำรวจ...">
+
+          <label>ตัวเลือกคำตอบ:</label>
+          <div id="options-list">
+            <div class="option-row" id="opt-0">
+              <div class="option-header">
+                <input type="text" class="opt-text" placeholder="ตัวเลือกที่ 1">
+              </div>
+              <div class="quota-box">
+                <input type="checkbox" class="opt-has-limit" onchange="toggleQuotaInput(0)">
+                <span>จำกัดจำนวนผู้ตอบ</span>
+                <input type="number" class="opt-max" min="1" value="5" style="display:none;">
+                <span class="quota-unit" style="display:none;">คน</span>
+              </div>
+            </div>
+          </div>
+
+          <button class="btn btn-secondary" onclick="addOptionRow()">+ เพิ่มตัวเลือก</button>
+
+          <label class="checkbox-group">
+            <input type="checkbox" id="allowMultiple">
+            <span>อนุญาตให้เลือกตอบได้มากกว่า 1 ตัวเลือก</span>
+          </label>
+
           <button class="btn" onclick="createNewPoll()">สร้างและแชร์ลงกลุ่ม LINE</button>
         `;
         return;
       }
 
-      // หน้าที่ 2: หน้าลงชื่อตอบคำถาม
+      // ------------------ 2. หน้าแสดงแบบสำรวจและตอบคำถาม ------------------
+      const isMultiple = pollState.allowMultiple || false;
+      
       let optionsHTML = pollState.options.map((opt, idx) => {
-        const isFull = opt.voters.length >= opt.max;
-        const votersList = opt.voters.length > 0 ? `<br><small style="color:#666">คนลงชื่อ: ${opt.voters.join(', ')}</small>` : '';
+        const isFull = opt.max !== null && opt.voters.length >= opt.max;
+        const limitText = opt.max !== null ? `(${opt.voters.length}/${opt.max})` : `(${opt.voters.length} คน)`;
+        const votersList = opt.voters.length > 0 ? `<br><small style="color:#666">ผู้ตอบ: ${opt.voters.join(', ')}</small>` : '';
+        
         return `
-          <div class="option">
-            <div>
-              <strong>${opt.name}</strong> (${opt.voters.length}/${opt.max})${votersList}
+          <div class="option-row" style="background: white;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <strong>${opt.name}</strong> <span style="font-size:13px; color:#666;">${limitText}</span>${votersList}
+              </div>
+              <button class="btn" style="width:auto; padding:8px 16px; margin:0;" onclick="vote(${idx})" ${isFull ? 'disabled' : ''}>
+                ${isFull ? 'เต็ม' : 'เลือก'}
+              </button>
             </div>
-            <button class="btn" style="width:auto; margin:0;" onclick="vote(${idx})" ${isFull ? 'disabled' : ''}>
-              ${isFull ? 'เต็ม' : 'เลือก'}
-            </button>
           </div>
         `;
       }).join('');
 
       app.innerHTML = `
         <h2>${pollState.title}</h2>
+        <p style="font-size:13px; color:#666; margin-top:-8px; margin-bottom:16px;">
+          ${isMultiple ? 'เลือกได้มากกว่า 1 ข้อ' : 'เลือกตอบได้เพียง 1 ข้อ'}
+        </p>
         ${optionsHTML}
       `;
     }
 
-    function createNewPoll() {
-      const title = document.getElementById('title').value;
-      const opt1 = document.getElementById('opt1').value;
-      const opt2 = document.getElementById('opt2').value;
+    // ------------------ ฟังก์ชันฝั่งสร้าง Poll ------------------
+    let optionCount = 1;
 
-      if (!title || !opt1 || !opt2) return alert('กรุณากรอกข้อมูลให้ครบ');
+    function addOptionRow() {
+      const list = document.getElementById('options-list');
+      const newIdx = optionCount++;
+      const div = document.createElement('div');
+      div.className = 'option-row';
+      div.id = `opt-${newIdx}`;
+      div.innerHTML = `
+        <div class="option-header">
+          <input type="text" class="opt-text" placeholder="ตัวเลือกที่ ${newIdx + 1}">
+          <button class="btn-danger" onclick="removeOptionRow(${newIdx})">ลบ</button>
+        </div>
+        <div class="quota-box">
+          <input type="checkbox" class="opt-has-limit" onchange="toggleQuotaInput(${newIdx})">
+          <span>จำกัดจำนวนผู้ตอบ</span>
+          <input type="number" class="opt-max" min="1" value="5" style="display:none;">
+          <span class="quota-unit" style="display:none;">คน</span>
+        </div>
+      `;
+      list.appendChild(div);
+    }
+
+    function removeOptionRow(idx) {
+      const row = document.getElementById(`opt-${idx}`);
+      if (row) row.remove();
+    }
+
+    function toggleQuotaInput(idx) {
+      const row = document.getElementById(`opt-${idx}`);
+      const checkbox = row.querySelector('.opt-has-limit');
+      const numInput = row.querySelector('.opt-max');
+      const unit = row.querySelector('.quota-unit');
+      
+      if (checkbox.checked) {
+        numInput.style.display = 'inline-block';
+        unit.style.display = 'inline-block';
+      } else {
+        numInput.style.display = 'none';
+        unit.style.display = 'none';
+      }
+    }
+
+    function createNewPoll() {
+      const title = document.getElementById('title').value.trim();
+      if (!title) return alert('กรุณากรอกคำถามที่ต้องการสำรวจ');
+
+      const rows = document.querySelectorAll('.option-row');
+      const options = [];
+
+      rows.forEach(row => {
+        const name = row.querySelector('.opt-text').value.trim();
+        const hasLimit = row.querySelector('.opt-has-limit').checked;
+        const maxVal = parseInt(row.querySelector('.opt-max').value);
+
+        if (name) {
+          options.push({
+            name: name,
+            max: hasLimit ? (isNaN(maxVal) ? 1 : maxVal) : null, // null คือไม่อั้น
+            voters: []
+          });
+        }
+      });
+
+      if (options.length === 0) return alert('กรุณากรอกอย่างน้อย 1 ตัวเลือก');
 
       const newState = {
         title: title,
-        options: [
-          { name: opt1, max: 2, voters: [] },
-          { name: opt2, max: 2, voters: [] }
-        ]
+        allowMultiple: document.getElementById('allowMultiple').checked,
+        options: options
       };
 
       shareToGroup(newState);
     }
 
+    // ------------------ ฟังก์ชันฝั่งตอบ Poll ------------------
     async function vote(optionIdx) {
       if (!liff.isLoggedIn()) {
         liff.login();
@@ -111,24 +208,34 @@
       const userName = profile.displayName;
       const opt = pollState.options[optionIdx];
 
-      // เช็ก Quota
-      if (opt.voters.length >= opt.max) {
+      // เช็ก Quota ถ้ามีการกำหนดจำกัดจำนวนไว้
+      if (opt.max !== null && opt.voters.length >= opt.max) {
         alert('ขออภัย! ตัวเลือกนี้เพิ่งเต็มไปเมื่อสักครู่นี้');
         location.reload();
         return;
       }
 
-      // ป้องกันลงชื่อซ้ำ
-      const hasVoted = pollState.options.some(o => o.voters.includes(userName));
-      if (hasVoted) {
-        alert('คุณได้ลงชื่อในโจทย์นี้ไปแล้ว');
+      // เช็กการเลือกซ้ำ
+      const hasVotedThisOpt = opt.voters.includes(userName);
+      if (hasVotedThisOpt) {
+        alert('คุณได้ลงชื่อในตัวเลือกนี้ไปแล้ว');
         return;
+      }
+
+      // กรณีไม่อนุญาตให้เลือกหลายข้อ แต่เคยตอบตัวเลือกอื่นไปแล้ว
+      if (!pollState.allowMultiple) {
+        const hasVotedAny = pollState.options.some(o => o.voters.includes(userName));
+        if (hasVotedAny) {
+          alert('แบบสำรวจนี้อนุญาตให้เลือกตอบได้เพียง 1 ข้อเท่านั้น');
+          return;
+        }
       }
 
       opt.voters.push(userName);
       shareToGroup(pollState);
     }
 
+    // ------------------ ส่ง Flex Message ลงแชตกลุ่ม ------------------
     async function shareToGroup(state) {
       const jsonString = JSON.stringify(state);
       const base64Data = btoa(encodeURIComponent(jsonString));
@@ -145,7 +252,8 @@
                 type: "box",
                 layout: "vertical",
                 contents: [
-                  { type: "text", text: "📊 " + state.title, weight: "bold", size: "lg" },
+                  { type: "text", text: "📊 " + state.title, weight: "bold", size: "lg", wrap: true },
+                  { type: "text", text: state.allowMultiple ? "*เลือกได้มากกว่า 1 ตัวเลือก" : "*เลือกตอบได้ 1 ตัวเลือก", margin: "xs", color: "#888888", size: "xs" },
                   { type: "text", text: "กดปุ่มด้านล่างเพื่อลงชื่อ หรือดูสถานะล่าสุด", margin: "md", color: "#666666", size: "sm", wrap: true }
                 ]
               },
@@ -155,7 +263,7 @@
                 contents: [
                   {
                     type: "button",
-                    action: { type: "uri", label: "เปิดลงชื่อ / ดูผลลัพธ์", uri: shareURL },
+                    action: { type: "uri", label: "เปิดตอบแบบสำรวจ / ดูผลลัพธ์", uri: shareURL },
                     style: "primary",
                     color: "#06C755"
                   }
